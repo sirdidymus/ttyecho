@@ -1,60 +1,81 @@
-// Original author: Pratik Sinha
-// http://www.humbug.in/2010/utility-to-send-commands-or-data-to-other-terminals-ttypts/
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
-#include <string.h>
+#include <string.h> 
+#include <stdio.h> 
+#include <stdlib.h> 
+#include <fcntl.h> 
+#include <sys/ioctl.h> 
 #include <unistd.h>
+#include "util.h" 
 
-void print_help(char *prog_name) {
-    printf("Usage: %s [-n] DEVNAME COMMAND\n", prog_name);
-    printf("Usage: '-n' is an optional argument if you want to push a new line at the end of the text\n");
-    printf("Usage: Will require 'sudo' to run if the executable is not setuid root\n");
-    exit(1);
-}
+char *prog_name;
 
-int main (int argc, char *argv[]) {
-    char *cmd, *nl = "\n";
-    int i, fd;
-    int devno, commandno, newline;
-    int mem_len;
-    devno = 1; commandno = 2; newline = 0;
-    if (argc < 3) {
-        print_help(argv[0]);
-    }
-    if (argc > 3 && argv[1][0] == '-' && argv[1][1] == 'n') {
-        devno = 2; commandno = 3; newline=1;
-    } else if (argc > 3 && argv[1][0] == '-' && argv[1][1] != 'n') {
-        printf("Invalid Option\n");
-        print_help(argv[0]);
-    }
-    fd = open(argv[devno],O_RDWR);
-    if(fd == -1) {
+void usage(){ 
+    fprintf(stderr, "Usage: %s [-n] DEVNAME COMMAND\n" \
+            "'-n' is an optional argument to place a newline " \
+            "at the end of the command\n", prog_name);
+    exit(1); 
+} 
+
+int main(int argc, char *argv[]){
+
+     char *command; 
+     char *newline = "\n"; 
+     int opt, fd, nflag = 0, mem_len = 0; 
+     prog_name = argv[0];
+
+     while ((opt = getopt(argc, argv, ":n")) != -1){ 
+       switch(opt){ 
+        case 'n': 
+             nflag = 1; 
+             break; 
+        case '?':
+             printf("unknown argument(s):\n\n"); 
+             usage(); 
+             exit(EXIT_FAILURE); 
+        default:
+             usage(); 
+             exit(EXIT_FAILURE); 
+      }
+     }; argc-=optind, argv += optind; 
+
+     if (argc < 2) { 
+        usage();
+     } 
+
+    if ((fd = open(argv[0], O_RDWR)) == -1){ 
         perror("open DEVICE");
-        exit(1);
+        exit(EXIT_FAILURE); 
     }
-    mem_len = 0;
-    for ( i = commandno; i < argc; i++ ) {
-        mem_len += strlen(argv[i]) + 2;
-        if ( i > commandno ) {
-            cmd = (char *)realloc((void *)cmd, mem_len);
-        } else { //i == commandno
-            cmd = (char *)malloc(mem_len);
-        }
 
-        strcat(cmd, argv[i]);
-        // strcat(cmd, " ");
+    for (int i = 1; i < argc; i++){ 
+
+        mem_len += strlen(argv[i]) + 2;
+     
+        if (i > 1) { 
+            if ((command = realloc(command, mem_len)) == NULL){
+                perror("realloc");
+                exit(EXIT_FAILURE); 
+            }
+        } else { 
+            if ((command = malloc(mem_len)) == NULL){ 
+                perror("malloc");
+                exit(EXIT_FAILURE); 
+            }
+        }
+        
+        strcat(command, argv[i]); 
+        strcat(command, " "); 
+    } 
+     
+    for (int i = 0; command[i]; i++){
+         ioctl(fd, TIOCSTI, command + i);
     }
-  if (newline == 0)
-        usleep(225000);
-    for (i = 0; cmd[i]; i++)
-        ioctl (fd, TIOCSTI, cmd+i);
-    if (newline == 1)
-        ioctl (fd, TIOCSTI, nl);
-    close(fd);
-    free((void *)cmd);
-    exit (0);
-}
+
+    if(nflag){
+        ioctl(fd, TIOCSTI, newline);
+    };  
+    
+    close(fd); 
+    free(command);
+    exit(EXIT_SUCCESS); 
+}     
+    
