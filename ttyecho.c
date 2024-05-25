@@ -4,7 +4,7 @@
 #include <fcntl.h> 
 #include <sys/ioctl.h> 
 #include <unistd.h>
-#include "util.h" 
+
 
 char *prog_name;
 
